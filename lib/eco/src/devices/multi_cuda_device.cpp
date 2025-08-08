@@ -9,6 +9,7 @@
 #include <fstream>
 #include <climits>
 #include <cstdlib>
+#include <sys/stat.h>
 
 MultiCudaDevice::MultiCudaDevice(const std::vector<int>& deviceIds)
   : deviceIDs_(deviceIds)
@@ -42,6 +43,23 @@ MultiCudaDevice::MultiCudaDevice(const std::vector<int>& deviceIds)
     else
       defaultPowerLimitInWatts_[i] = 0.0;
   }
+}
+
+// Local helper to read an integer value from a file; returns -1 if not available
+static inline long long readValueFromFile(const std::string& fileName)
+{
+  std::ifstream file(fileName.c_str());
+  std::string line;
+  long long value = -1;
+  if (file.is_open())
+  {
+    while (std::getline(file, line))
+    {
+      value = std::atoll(line.c_str());
+    }
+    file.close();
+  }
+  return value;
 }
 
 void MultiCudaDevice::initDeviceHandles()
@@ -132,7 +150,14 @@ void MultiCudaDevice::setPowerLimitInMicroWatts(unsigned long limitInMicroW)
 
 void MultiCudaDevice::reset()
 {
-  // Nothing special beyond single GPU path (kernel counter handled elsewhere)
+  // Mirror single-GPU behavior: initialize kernels counter file so perf reads don't block
+  std::ofstream kernelCounterFile;
+  kernelCounterFile.open("kernels_count", std::ios::out | std::ios::trunc);
+  if (kernelCounterFile.is_open())
+  {
+    kernelCounterFile << "0";
+    kernelCounterFile.close();
+  }
 }
 
 double MultiCudaDevice::getCurrentPowerInWatts(std::optional<Domain>) const
@@ -151,19 +176,11 @@ double MultiCudaDevice::getCurrentPowerInWatts(std::optional<Domain>) const
 unsigned long long int MultiCudaDevice::getPerfCounter() const
 {
   // Reuse the same perf counter source (injection library aggregates at process level)
-  // Mirror single GPU approach: read kernels_count file
-  long long int kernelsCountTmp {-1};
-  do
-  {
-    std::ifstream f("./kernels_count");
-    if (f.is_open())
-    {
-      std::string s; if (std::getline(f, s)) kernelsCountTmp = std::atoll(s.c_str());
-      f.close();
-    }
+  // Non-blocking: if the file is not present yet, return 0
+  long long kernelsCountTmp = readValueFromFile("./kernels_count");
+  if (kernelsCountTmp < 0) {
+    return 0ULL;
   }
-  while (kernelsCountTmp == -1);
-
   return static_cast<unsigned long long>(kernelsCountTmp);
 }
 
