@@ -1,3 +1,0 @@
-repository='https://github.com/opcm/pcm.git'
-module=''
-tag='origin'
