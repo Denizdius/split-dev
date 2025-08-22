@@ -268,12 +268,35 @@ void Eco::execPhase(
     int repetitionPeriodInUs = cfg_.repeatTuningPeriodInSec_ * 1e6 + cfg_.usTestPhasePeriod_;
     device_->setPowerLimitInMicroWatts(powerCap_uW);
     printLine();
+    // Console: print per-subdevice current powers when applicable
+    if (device_->getNumSubdevices() > 1)
+    {
+        std::cout << std::fixed << std::setprecision(2);
+        std::cout << "#t[ms]\tP_cap[W]";
+        for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
+        {
+            std::cout << "\tP_gpu" << device_->getSubdeviceLabel(i) << "[W]";
+        }
+        std::cout << "\n";
+    }
     while (status && repetitionPeriodInUs > 0)
     {
         auto papResult = checkPowerAndPerformance(cfg_.usTestPhasePeriod_);
         repetitionPeriodInUs = trigger_.isTuningPeriodic() ? repetitionPeriodInUs - cfg_.usTestPhasePeriod_ : repetitionPeriodInUs;
 
         logger_.logPowerLogLine(devStateGlobal_, papResult, refResult);
+        if (device_->getNumSubdevices() > 1)
+        {
+            std::cout << std::fixed << std::setprecision(0)
+                      << devStateGlobal_.getTimeSinceObjectCreation() << "\t"
+                      << std::setprecision(2)
+                      << papResult.appliedPowerCapInWatts_;
+            for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
+            {
+                std::cout << "\t" << device_->getCurrentPowerInWattsForSubdevice(i);
+            }
+            std::cout << "\n";
+        }
         waitpid(childPID, &status, WNOHANG);
         if (external_trigger_flag.load())
         {
@@ -503,6 +526,37 @@ void Eco::plotPowerLog(std::optional<FinalPowerAndPerfResult> results, std::stri
         p.plotPowerLogWithDynamicMetrics(
             {powerCap, currPower,smaPower},
             {dyn_en, dyn_edp, dyn_eds, dyn_perf});
+    }
+    // If per-subdevice CSVs exist, render PNGs per GPU using same styles minimal
+    if (device_->getNumSubdevices() > 1)
+    {
+        for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
+        {
+            const auto csv = logger_.getPerSubdeviceFileName(i);
+            std::string img = csv;
+            PlotBuilder ps(img.replace(img.end()-3, img.end(), "png"));
+            ps.setPlotTitle("gpu" + device_->getSubdeviceLabel(i) + " power log: " + device_->getName(), 16);
+            Series pcap(csv, 1, 2, "P cap [W]");
+            Series pav(csv, 1, 3, "P[W]");
+            ps.plotPowerLog({pcap, pav});
+        }
+        // Produce average_result.csv and summed_results.csv
+        // Here we approximate averages over entire run using totals from devStateGlobal_
+        double totalTime = devStateGlobal_.getTimeSinceReset<std::chrono::milliseconds>() / 1000.0;
+        double totalPowerAll = device_->getCurrentPowerInWatts(std::nullopt); // instantaneous, but we use energy totals below for accurate
+        // Use overall energy as sum energy; average power is sum_energy / time; average per GPU is that divided by N
+        // Since DeviceStateAccumulator currently integrates summed power for all subdevices (MultiCuda sums),
+        // treat energySinceReset as total energy across GPUs.
+        double totalEnergy = devStateGlobal_.getEnergySinceReset();
+        size_t n = device_->getNumSubdevices();
+        std::ofstream avgf("average_result.csv", std::ios::out | std::ios::trunc);
+        avgf << "avg_energy_per_gpu[J],avg_power_per_gpu[W],time[s]\n"
+             << (totalEnergy / n) << "," << (totalEnergy / totalTime / n) << "," << totalTime << "\n";
+        avgf.close();
+        std::ofstream sumf("summed_results.csv", std::ios::out | std::ios::trunc);
+        sumf << "total_energy[J],avg_power_total[W],time[s]\n"
+             << totalEnergy << "," << (totalEnergy / totalTime) << "," << totalTime << "\n";
+        sumf.close();
     }
 }
 

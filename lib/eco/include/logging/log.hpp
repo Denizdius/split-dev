@@ -58,6 +58,7 @@ std::string logCurrentPowerLogtLine(
     PowAndPerfResult& curr,
     const std::optional<PowAndPerfResult> reference = std::nullopt,
     double k = 2.0,
+    const std::vector<double>* perSubdevicePowers = nullptr,
     bool noNewLine = false)
 {
     std::stringstream sstream;
@@ -85,6 +86,13 @@ std::string logCurrentPowerLogtLine(
                 << "\t" << (std::isinf(currRelativeEDP) || std::isnan(currRelativeEDP) ? 1.0 : currRelativeEDP)
                 << "\t" << curr.checkPlusMetric(reference.value(), k);
     }
+    if (perSubdevicePowers && !perSubdevicePowers->empty())
+    {
+        for (double p : *perSubdevicePowers)
+        {
+            sstream << "\t" << p;
+        }
+    }
     if (noNewLine) {
         sstream << std::flush;
     } else {
@@ -110,7 +118,22 @@ class Logger
     }
     void logPowerLogLine(DeviceStateAccumulator& deviceState, PowAndPerfResult current, const std::optional<PowAndPerfResult> reference = std::nullopt)
     {
-        *power_bout_  << logCurrentPowerLogtLine(deviceState.getTimeSinceObjectCreation(), current, reference);
+        // If device has multiple subdevices, also include their powers in the main CSV tail
+        std::vector<double> subPowers;
+        auto dev = deviceState.getDevice();
+        if (dev && dev->getNumSubdevices() > 1)
+        {
+            ensurePerSubdevice(dev->getNumSubdevices());
+            const auto t = deviceState.getTimeSinceObjectCreation();
+            for (size_t i = 0; i < dev->getNumSubdevices(); ++i)
+            {
+                double p = dev->getCurrentPowerInWattsForSubdevice(i);
+                subPowers.push_back(p);
+                // minimal CSV: time, P_cap, P_av
+                sub_power_files_[i] << t << "\t\t" << current.appliedPowerCapInWatts_ << "\t\t" << p << "\n";
+            }
+        }
+        *power_bout_  << logCurrentPowerLogtLine(deviceState.getTimeSinceObjectCreation(), current, reference, 2.0, (subPowers.empty() ? nullptr : &subPowers));
     }
     void logToResultFile(std::stringstream& ss)
     {
@@ -129,6 +152,23 @@ class Logger
     {
         return resultFileName_;
     }
+    // Per-subdevice files
+    void ensurePerSubdevice(size_t count)
+    {
+        if (sub_power_files_.size() >= count) return;
+        sub_power_files_.resize(count);
+        sub_power_names_.resize(count);
+        for (size_t i = 0; i < count; ++i)
+        {
+            if (sub_power_names_[i].empty())
+            {
+                sub_power_names_[i] = generateSibling(powerFileName_, std::string("power_log_gpu") + std::to_string(i) + ".csv");
+                sub_power_files_[i].open(sub_power_names_[i], std::ios::out | std::ios::trunc);
+                sub_power_files_[i] << "#t[ms]\t\tP_cap[W]\t\tP_av[W]\t\tP_SMA[W]\t\tE[J]\t\tinstr[-]\t\tinst/En[1/J]\t\tEDP[Js]\n";
+            }
+        }
+    }
+    std::string getPerSubdeviceFileName(size_t idx) const { return sub_power_names_.at(idx); }
     ~Logger()
     {
         powerFile_.close();
@@ -141,6 +181,8 @@ class Logger
     std::ofstream resultFile_;
     std::unique_ptr<BothStream> power_bout_;
     std::unique_ptr<BothStream> result_bout_;
+    std::vector<std::ofstream> sub_power_files_;
+    std::vector<std::string> sub_power_names_;
 
     std::string generateUniqueDir(std::string prefix = "")
     {
@@ -155,5 +197,11 @@ class Logger
             exit(1);
         }
         return dir;
+    }
+    static std::string generateSibling(const std::string& base, const std::string& name)
+    {
+        auto pos = base.find_last_of('/') ;
+        if (pos == std::string::npos) return name;
+        return base.substr(0, pos+1) + name;
     }
 };

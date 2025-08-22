@@ -38,6 +38,10 @@ public:
     virtual double getCurrentPowerInWatts(std::optional<Domain>) const = 0;
     virtual void restoreDefaultLimits() = 0;
     virtual std::string getDeviceTypeString() const = 0;
+    // Multi-subdevice support (default: single logical device)
+    virtual size_t getNumSubdevices() const { return 1; }
+    virtual double getCurrentPowerInWattsForSubdevice(size_t /*index*/) const { return getCurrentPowerInWatts(std::nullopt); }
+    virtual std::string getSubdeviceLabel(size_t index) const { return std::to_string(index); }
     /*
       triggerPowerApiSample - used to trigger next sample from Power Management API
 

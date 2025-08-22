@@ -88,6 +88,7 @@ public:
     void resetState();
     double getCurrentPower(Domain d);
     double getPerfCounterSinceReset();
+    std::shared_ptr<Device> getDevice() const { return device_; }
 
 private:
     TimePoint absoluteStartTime_;

@@ -61,6 +61,8 @@ DeviceStateAccumulator& DeviceStateAccumulator::sample()
     return *this;
 }
 
+// Helper: per-subdevice power snapshot lines generation moved to Logger side; no change here
+
 double DeviceStateAccumulator::getCurrentPower(Domain d)
 {
     return device_->getCurrentPowerInWatts(d);

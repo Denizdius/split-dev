@@ -1,0 +1,92 @@
+[
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/eco.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/eco.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/eco.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/params_config.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/params_config.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/params_config.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/plot_builder.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/plot_builder.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/plot_builder.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/device_state.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/device_state.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/device_state.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/data_structures/data_filter.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/data_structures/data_filter.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/data_structures/data_filter.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/data_structures/final_power_and_perf_result.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/data_structures/final_power_and_perf_result.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/data_structures/final_power_and_perf_result.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/data_structures/power_and_perf_result.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/data_structures/power_and_perf_result.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/data_structures/power_and_perf_result.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/data_structures/results_container.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/data_structures/results_container.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/data_structures/results_container.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/devices/intel_device.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/devices/intel_device.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/devices/intel_device.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/power_interfaces/msr.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/power_interfaces/msr.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/power_interfaces/msr.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/power_interfaces/Rapl.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/power_interfaces/Rapl.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/power_interfaces/Rapl.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/devices/cuda_device.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/devices/cuda_device.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/devices/cuda_device.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o lib/eco/CMakeFiles/eco.dir/src/devices/multi_cuda_device.cpp.o -c /home/deniz/Documents/split-dev/lib/eco/src/devices/multi_cuda_device.cpp",
+  "file": "/home/deniz/Documents/split-dev/lib/eco/src/devices/multi_cuda_device.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o apps/DEPO/CMakeFiles/DEPO.dir/dynamic_energy_performance_optimizer.cpp.o -c /home/deniz/Documents/split-dev/apps/DEPO/dynamic_energy_performance_optimizer.cpp",
+  "file": "/home/deniz/Documents/split-dev/apps/DEPO/dynamic_energy_performance_optimizer.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o apps/StEP/CMakeFiles/StEP.dir/static_energy_profiler.cpp.o -c /home/deniz/Documents/split-dev/apps/StEP/static_energy_profiler.cpp",
+  "file": "/home/deniz/Documents/split-dev/apps/StEP/static_energy_profiler.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o apps/simple/CMakeFiles/CpuPowerMonitor.dir/cpu_power_monitor.cpp.o -c /home/deniz/Documents/split-dev/apps/simple/cpu_power_monitor.cpp",
+  "file": "/home/deniz/Documents/split-dev/apps/simple/cpu_power_monitor.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o apps/simple/CMakeFiles/SetCpuPowerLimit.dir/set_cpu_power_limit.cpp.o -c /home/deniz/Documents/split-dev/apps/simple/set_cpu_power_limit.cpp",
+  "file": "/home/deniz/Documents/split-dev/apps/simple/set_cpu_power_limit.cpp"
+},
+{
+  "directory": "/home/deniz/Documents/split-dev/build",
+  "command": "/usr/bin/g++ -DFMT_LOCALE -DFMT_SHARED -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -I/usr/local/cuda/include -I/home/deniz/Documents/split-dev/build/gnuplot-iostream-src -I/home/deniz/Documents/split-dev/build/pcm-src -I/home/deniz/Documents/split-dev/lib/eco/include -g -o apps/experimental/CMakeFiles/DEPO_GSS.dir/dynamic_eco_gss.cpp.o -c /home/deniz/Documents/split-dev/apps/experimental/dynamic_eco_gss.cpp",
+  "file": "/home/deniz/Documents/split-dev/apps/experimental/dynamic_eco_gss.cpp"
+}
+]

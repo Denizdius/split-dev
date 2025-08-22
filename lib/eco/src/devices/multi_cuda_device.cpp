@@ -173,6 +173,15 @@ double MultiCudaDevice::getCurrentPowerInWatts(std::optional<Domain>) const
   return sumW;
 }
 
+double MultiCudaDevice::getCurrentPowerInWattsForSubdevice(size_t index) const
+{
+  if (index >= deviceIDs_.size()) return 0.0;
+  unsigned powerMw = 0;
+  if (nvmlDeviceGetPowerUsage(deviceHandles_[deviceIDs_[index]], &powerMw) != NVML_SUCCESS)
+    return 0.0;
+  return static_cast<double>(powerMw) / 1000.0;
+}
+
 unsigned long long int MultiCudaDevice::getPerfCounter() const
 {
   // Reuse the same perf counter source (injection library aggregates at process level)
