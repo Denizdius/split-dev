@@ -143,6 +143,12 @@ class Logger
     {
         return powerFileName_;
     }
+    std::string getOutputDir() const
+    {
+        auto pos = powerFileName_.find_last_of('/');
+        if (pos == std::string::npos) return std::string("./");
+        return powerFileName_.substr(0, pos+1);
+    }
     void flush() // might be useless
     {
         power_bout_->flush();

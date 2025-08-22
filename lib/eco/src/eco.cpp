@@ -115,6 +115,17 @@ using MS = std::chrono::milliseconds;
 void Eco::singleAppRunAndPowerSample(char* const* argv) {
     devStateGlobal_.resetState();
 
+    if (device_->getNumSubdevices() > 1)
+    {
+        std::cout << std::fixed << std::setprecision(2);
+        std::cout << "#t[ms]\tP_cap[W]";
+        for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
+        {
+            std::cout << "\tP_gpu" << device_->getSubdeviceLabel(i) << "[W]";
+        }
+        std::cout << "\n";
+    }
+
     int fd = open("EP_stdout.txt", O_WRONLY|O_TRUNC|O_CREAT, 0644);
     if (fd < 0)
     {
@@ -145,7 +156,20 @@ void Eco::singleAppRunAndPowerSample(char* const* argv) {
             // child alive - monitored app is running
             usleep(cfg_.msPause_ * 1000);
             devStateGlobal_.sample();
-            logger_.logPowerLogLine(devStateGlobal_, devStateGlobal_.getCurrentPowerAndPerf());
+            auto tmp = devStateGlobal_.getCurrentPowerAndPerf();
+            logger_.logPowerLogLine(devStateGlobal_, tmp);
+            if (device_->getNumSubdevices() > 1)
+            {
+                std::cout << std::fixed << std::setprecision(0)
+                          << devStateGlobal_.getTimeSinceObjectCreation() << "\t"
+                          << std::setprecision(2)
+                          << tmp.appliedPowerCapInWatts_;
+                for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
+                {
+                    std::cout << "\t" << device_->getCurrentPowerInWattsForSubdevice(i);
+                }
+                std::cout << "\n";
+            }
         } else if (result == -1) {
             // waitpid error
             perror("waitpid");
@@ -549,11 +573,12 @@ void Eco::plotPowerLog(std::optional<FinalPowerAndPerfResult> results, std::stri
         // treat energySinceReset as total energy across GPUs.
         double totalEnergy = devStateGlobal_.getEnergySinceReset();
         size_t n = device_->getNumSubdevices();
-        std::ofstream avgf("average_result.csv", std::ios::out | std::ios::trunc);
+        const auto outDir = logger_.getOutputDir();
+        std::ofstream avgf(outDir + "average_result.csv", std::ios::out | std::ios::trunc);
         avgf << "avg_energy_per_gpu[J],avg_power_per_gpu[W],time[s]\n"
              << (totalEnergy / n) << "," << (totalEnergy / totalTime / n) << "," << totalTime << "\n";
         avgf.close();
-        std::ofstream sumf("summed_results.csv", std::ios::out | std::ios::trunc);
+        std::ofstream sumf(outDir + "summed_results.csv", std::ios::out | std::ios::trunc);
         sumf << "total_energy[J],avg_power_total[W],time[s]\n"
              << totalEnergy << "," << (totalEnergy / totalTime) << "," << totalTime << "\n";
         sumf.close();
