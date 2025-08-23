@@ -117,6 +117,7 @@ void Eco::singleAppRunAndPowerSample(char* const* argv) {
 
     if (device_->getNumSubdevices() > 1)
     {
+        logger_.setMuteConsole(true); // avoid duplicate lines from BothStream (console + file)
         std::cout << std::fixed << std::setprecision(2);
         std::cout << "#t[ms]\tP_cap[W]";
         for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
@@ -295,6 +296,7 @@ void Eco::execPhase(
     // Console: print per-subdevice current powers when applicable
     if (device_->getNumSubdevices() > 1)
     {
+        logger_.setMuteConsole(true); // avoid duplicate lines from BothStream (console + file)
         std::cout << std::fixed << std::setprecision(2);
         std::cout << "#t[ms]\tP_cap[W]";
         for (size_t i = 0; i < device_->getNumSubdevices(); ++i)

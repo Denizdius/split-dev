@@ -133,7 +133,15 @@ class Logger
                 sub_power_files_[i] << t << "\t\t" << current.appliedPowerCapInWatts_ << "\t\t" << p << "\n";
             }
         }
-        *power_bout_  << logCurrentPowerLogtLine(deviceState.getTimeSinceObjectCreation(), current, reference, 2.0, (subPowers.empty() ? nullptr : &subPowers));
+        auto line = logCurrentPowerLogtLine(deviceState.getTimeSinceObjectCreation(), current, reference, 2.0, (subPowers.empty() ? nullptr : &subPowers));
+        if (muteConsole_)
+        {
+            powerFile_ << line;
+        }
+        else
+        {
+            *power_bout_ << line;
+        }
     }
     void logToResultFile(std::stringstream& ss)
     {
@@ -175,6 +183,7 @@ class Logger
         }
     }
     std::string getPerSubdeviceFileName(size_t idx) const { return sub_power_names_.at(idx); }
+    void setMuteConsole(bool m) { muteConsole_ = m; }
     ~Logger()
     {
         powerFile_.close();
@@ -189,6 +198,7 @@ class Logger
     std::unique_ptr<BothStream> result_bout_;
     std::vector<std::ofstream> sub_power_files_;
     std::vector<std::string> sub_power_names_;
+    bool muteConsole_ {false};
 
     std::string generateUniqueDir(std::string prefix = "")
     {
