@@ -273,12 +273,29 @@ void Eco::reportResult(double waitTime, double testTime) {
 
 void Eco::waitForTuningTrigger(int& status, int childPID) {
     waitpid(childPID, &status, WNOHANG);
+    // Fallback baseline for immediate modes: if perf counter never increments (e.g., injection disabled),
+    // allow tuning to start once filtered power rises noticeably over its initial baseline.
+    double baselineFilteredPowerW = -1.0;
+    const double powerRiseEpsilonW = 5.0; // minimal rise above baseline to consider activity
     while ((!trigger_.isDeviceReadyForTuning()) && status)
     {
         auto papResult = checkPowerAndPerformance(cfg_.usTestPhasePeriod_);
         // std::cout << FLUSH_AND_RETURN
         //         << logCurrentResultLine(papResult, papResult, cfg_.k_, true /* no new line */);
-
+        // Immediate-mode fallback: if doWaitPhase is off and we detect a significant rise in filtered power
+        // compared to the first observed value, proceed to tuning even without perf-counter activity.
+        if (!cfg_.doWaitPhase_)
+        {
+            const double currentFilteredPowerW = trigger_.getCurrentFilteredPowerInWatts();
+            if (baselineFilteredPowerW < 0.0)
+            {
+                baselineFilteredPowerW = currentFilteredPowerW;
+            }
+            else if (currentFilteredPowerW > (baselineFilteredPowerW + powerRiseEpsilonW))
+            {
+                break;
+            }
+        }
     }
     // std::cout << "\n";
     printLine();
