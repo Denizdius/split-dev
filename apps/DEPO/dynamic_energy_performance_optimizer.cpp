@@ -24,6 +24,7 @@
 #include <optional>
 #include <vector>
 #include <sstream>
+#include <algorithm>
 
 namespace po = boost::program_options;
 
@@ -122,6 +123,7 @@ void cleanArgv(int& argc, char* argv[])
             flag == "--edp" ||
             flag == "--eds" ||
             flag == "--no-tuning" ||
+            flag == "--async" ||
             std::string(flag).substr(0,6) == "--gpu="
             )
         {
@@ -190,6 +192,7 @@ int main (int argc, char *argv[])
         ("eds", "use Energy SumDelay  metric")
         ("no-tuning", "run app only checking the power and energy consumption")
         ("gpu", po::value<std::string>(), "use GPU backend; accept single ID (e.g., 0) or comma-separated list (e.g., 0,1,2)")
+        ("async", "multi-GPU only: same Linear/GSS as single-GPU, once per GPU (other GPUs fixed); CUPTI counts all targets; caps may differ. Not /tmp/trigger_file async tuning")
     ;
     po::variables_map optionsMap;
     po::store(po::parse_command_line(argc, argv, desc), optionsMap);
@@ -204,6 +207,11 @@ int main (int argc, char *argv[])
     // read metric and search algorithm
     std::tie(metric, search) = parseArgs(optionsMap);
     std::optional<std::vector<int>> gpuIDs = checkIfDeviceTypeIsGPU(optionsMap);
+    const bool wantAsyncMultiGpu = optionsMap.count("async") > 0;
+    if (wantAsyncMultiGpu && gpuIDs.has_value() && gpuIDs->size() == 1)
+    {
+        std::cerr << "[DEPO] Warning: --async applies only with multiple GPUs (--gpu 0,1,...); ignoring --async.\n";
+    }
     cleanArgv(argc, argv);
 
 
@@ -212,7 +220,7 @@ int main (int argc, char *argv[])
     {
         if (gpuIDs->size() > 1)
         {
-            device = std::make_shared<MultiCudaDevice>(*gpuIDs);
+            device = std::make_shared<MultiCudaDevice>(*gpuIDs, wantAsyncMultiGpu);
         }
         else
         {
@@ -231,8 +239,27 @@ int main (int argc, char *argv[])
         path = path + "/libinjection_2.so";
 
         int e2 = setenv("CUDA_INJECTION64_PATH", path.c_str(), 1);
+        int e3 = -1;
+        int e4 = -1;
+        if (wantAsyncMultiGpu && gpuIDs->size() > 1)
+        {
+            std::string idList;
+            for (size_t i = 0; i < gpuIDs->size(); ++i)
+            {
+                if (i > 0) idList += ',';
+                idList += std::to_string(gpuIDs->at(i));
+            }
+            e3 = setenv("DEPO_ASYNC_MULTI_GPU", "1", 1);
+            e4 = setenv("DEPO_TARGET_GPU_IDS", idList.c_str(), 1);
+            std::cout << "DEPO async multi-GPU: per-GPU search (stock DEPO algorithm each GPU); target GPU IDs=" << idList << "\n";
+        }
         std::cout << "ENV1 status: " << e1 << ", value: " << getenv("INJECTION_KERNEL_COUNT")
                   << "\nENV2 status: " << e2 << ", value: " << getenv("CUDA_INJECTION64_PATH") << "\n";
+        if (e3 == 0 && e4 == 0)
+        {
+            std::cout << "ENV3 status: " << e3 << ", DEPO_ASYNC_MULTI_GPU=" << getenv("DEPO_ASYNC_MULTI_GPU")
+                      << "\nENV4 status: " << e4 << ", DEPO_TARGET_GPU_IDS=" << getenv("DEPO_TARGET_GPU_IDS") << "\n";
+        }
     }
     else
     {
@@ -270,6 +297,8 @@ int main (int argc, char *argv[])
     {
         unsetenv("INJECTION_KERNEL_COUNT");
         unsetenv("CUDA_INJECTION64_PATH");
+        unsetenv("DEPO_ASYNC_MULTI_GPU");
+        unsetenv("DEPO_TARGET_GPU_IDS");
     }
 
 	return 0;

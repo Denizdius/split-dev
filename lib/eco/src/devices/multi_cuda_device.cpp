@@ -11,8 +11,8 @@
 #include <cstdlib>
 #include <sys/stat.h>
 
-MultiCudaDevice::MultiCudaDevice(const std::vector<int>& deviceIds)
-  : deviceIDs_(deviceIds)
+MultiCudaDevice::MultiCudaDevice(const std::vector<int>& deviceIds, bool asyncIndependentPerGpuCaps)
+  : deviceIDs_(deviceIds), asyncIndependentPerGpuCaps_(asyncIndependentPerGpuCaps)
 {
   // CUDA driver init to be consistent with single GPU path
   CUresult cuRes = cuInit(0);
@@ -42,6 +42,15 @@ MultiCudaDevice::MultiCudaDevice(const std::vector<int>& deviceIds)
       defaultPowerLimitInWatts_[i] = static_cast<double>(currMw) / 1000.0;
     else
       defaultPowerLimitInWatts_[i] = 0.0;
+  }
+  currentCapsMicroW_.resize(deviceIDs_.size());
+  for (size_t i = 0; i < deviceIDs_.size(); ++i)
+  {
+    unsigned currMw = 0;
+    if (NVML_SUCCESS == nvmlDeviceGetEnforcedPowerLimit(deviceHandles_[deviceIDs_[i]], &currMw))
+      currentCapsMicroW_[i] = static_cast<unsigned long>(currMw) * 1000UL;
+    else
+      currentCapsMicroW_[i] = 0UL;
   }
 }
 
@@ -127,16 +136,81 @@ std::pair<unsigned, unsigned> MultiCudaDevice::getMinMaxLimitInWatts() const
 
 double MultiCudaDevice::getPowerLimitInWatts() const
 {
-  // Return current limit of the first GPU (assume all equal when set via this class)
   if (deviceIDs_.empty()) return -1.0;
+  if (inPerGpuSearchSession_ && asyncIndependentPerGpuCaps_
+      && searchFocusIndex_ < deviceIDs_.size())
+  {
+    unsigned currMw = 0;
+    if (nvmlDeviceGetEnforcedPowerLimit(deviceHandles_[deviceIDs_[searchFocusIndex_]], &currMw) != NVML_SUCCESS)
+      return -1.0;
+    return static_cast<double>(currMw) / 1000.0;
+  }
+  if (asyncIndependentPerGpuCaps_ && deviceIDs_.size() > 1)
+  {
+    double sumMw = 0.0;
+    int n = 0;
+    for (int id : deviceIDs_)
+    {
+      unsigned currMw = 0;
+      if (nvmlDeviceGetEnforcedPowerLimit(deviceHandles_[id], &currMw) == NVML_SUCCESS)
+      {
+        sumMw += static_cast<double>(currMw);
+        ++n;
+      }
+    }
+    if (n == 0) return -1.0;
+    return (sumMw / static_cast<double>(n)) / 1000.0;
+  }
   unsigned currMw = 0;
   if (nvmlDeviceGetEnforcedPowerLimit(deviceHandles_[deviceIDs_[0]], &currMw) != NVML_SUCCESS) return -1.0;
   return static_cast<double>(currMw) / 1000.0;
 }
 
+void MultiCudaDevice::applyPerGpuVectorMicroWatts_(const std::vector<unsigned long>& microWattsPerSubdevice)
+{
+  currentCapsMicroW_ = microWattsPerSubdevice;
+  for (size_t i = 0; i < deviceIDs_.size(); ++i)
+  {
+    unsigned long limitInMilliWatts = microWattsPerSubdevice[i] / 1000UL;
+    nvmlReturn_t r =
+        nvmlDeviceSetPowerManagementLimit(deviceHandles_[deviceIDs_[i]], limitInMilliWatts);
+    if (r != NVML_SUCCESS)
+    {
+      std::cerr << "Failed to set power limit " << limitInMilliWatts << " mW for GPU " << deviceIDs_[i]
+                << ": " << nvmlErrorString(r) << "\n";
+    }
+  }
+}
+
+void MultiCudaDevice::beginPerGpuSearchSession(size_t focusIndex, const std::vector<unsigned long>& baselineCapsMicroW)
+{
+  if (!asyncIndependentPerGpuCaps_ || baselineCapsMicroW.size() != deviceIDs_.size())
+  {
+    return;
+  }
+  searchFocusIndex_ = focusIndex;
+  searchBaselineCapsMicroW_ = baselineCapsMicroW;
+  inPerGpuSearchSession_ = true;
+  applyPerGpuVectorMicroWatts_(baselineCapsMicroW);
+}
+
+void MultiCudaDevice::endPerGpuSearchSession()
+{
+  inPerGpuSearchSession_ = false;
+}
+
 void MultiCudaDevice::setPowerLimitInMicroWatts(unsigned long limitInMicroW)
 {
+  if (inPerGpuSearchSession_ && asyncIndependentPerGpuCaps_
+      && searchFocusIndex_ < deviceIDs_.size())
+  {
+    std::vector<unsigned long> caps = searchBaselineCapsMicroW_;
+    caps[searchFocusIndex_] = limitInMicroW;
+    applyPerGpuVectorMicroWatts_(caps);
+    return;
+  }
   unsigned long limitInMilliWatts = limitInMicroW / 1000UL;
+  currentCapsMicroW_.assign(deviceIDs_.size(), limitInMicroW);
   for (int id : deviceIDs_)
   {
     nvmlReturn_t r = nvmlDeviceSetPowerManagementLimit(deviceHandles_[id], limitInMilliWatts);
@@ -148,15 +222,45 @@ void MultiCudaDevice::setPowerLimitInMicroWatts(unsigned long limitInMicroW)
   }
 }
 
+void MultiCudaDevice::setPowerLimitsPerGpuMicroWatts(const std::vector<unsigned long>& microWattsPerSubdevice)
+{
+  if (!asyncIndependentPerGpuCaps_)
+  {
+    if (!microWattsPerSubdevice.empty())
+    {
+      setPowerLimitInMicroWatts(microWattsPerSubdevice.front());
+    }
+    return;
+  }
+  if (microWattsPerSubdevice.size() != deviceIDs_.size())
+  {
+    std::cerr << "MultiCudaDevice: expected " << deviceIDs_.size() << " per-GPU caps, got "
+              << microWattsPerSubdevice.size() << "\n";
+    return;
+  }
+  applyPerGpuVectorMicroWatts_(microWattsPerSubdevice);
+}
+
 void MultiCudaDevice::reset()
 {
-  // Mirror single-GPU behavior: initialize kernels counter file so perf reads don't block
   std::ofstream kernelCounterFile;
   kernelCounterFile.open("kernels_count", std::ios::out | std::ios::trunc);
   if (kernelCounterFile.is_open())
   {
     kernelCounterFile << "0";
     kernelCounterFile.close();
+  }
+  if (asyncIndependentPerGpuCaps_)
+  {
+    for (int id : deviceIDs_)
+    {
+      std::string name = std::string("kernels_gpu_") + std::to_string(id);
+      std::ofstream f(name.c_str(), std::ios::out | std::ios::trunc);
+      if (f.is_open())
+      {
+        f << "0";
+      }
+    }
   }
 }
 

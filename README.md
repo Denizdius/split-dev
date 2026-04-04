@@ -148,6 +148,18 @@ with `DEPO --help`.
 
 The parameters in the `config.yaml` file are documented in comments.
 
+### DEPO multi-GPU usage and implications (NVIDIA)
+
+When using the GPU backend, DEPO accepts a single device id or a comma-separated list, for example `--gpu 0` or `--gpu 0,1`. The following behaviors apply in addition to the single-GPU case described above.
+
+- **Single GPU (`--gpu` with one id):** One NVIDIA device is controlled; power limits and kernel-activity tracing follow the same model as in the original DEPO GPU workflow.
+
+- **Multi-GPU without `--async`:** All listed GPUs receive the **same** enforced power limit at each tuning step (one scalar cap applied to every selected device via NVML). The CUPTI injection library still drives the shared `kernels_count` signal used for online performance tracing in the usual way.
+
+- **Multi-GPU with `--async`:** Only meaningful when **at least two** GPU ids are given (if you pass `--async` with a single GPU, DEPO warns and behaves as without `--async`). Here DEPO enables **independent** NVML power limits per listed GPU. The chosen search algorithm (**Linear Search** or **Golden Section Search**) is run **once per GPU in order**: while one GPU is being swept, the others keep the current baseline caps, so the final limits **may differ** between devices. The reported scalar cap in summaries corresponds to the **average** of the per-GPU micro-watt limits; the execution phase applies the **full** per-GPU cap vector. This `--async` flag is **not** the same mechanism as the experimental external trigger file described in the “Experimental asynchronous Tuning” subsection below.
+
+- **Build/runtime:** GPU injection requires building the profiling injection library (e.g. under `profiling_injection`) and making its path available to DEPO (see `CUDA_INJECTION64_PATH` / `/tmp/depo_gpu_path` as used in your environment). Power capping still requires appropriate privileges (e.g. `sudo` on typical Linux setups), consistent with other DEPO GPU usage notes in this document.
+
 ### Available search modes in DEPO
 In DEPO there are several optimization modes available:
 1. **Just power sampling**, which launches the application and monitors and reports power and energy consumption when finished, available when `--no-tuning` parameter is passed.

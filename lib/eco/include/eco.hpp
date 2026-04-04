@@ -20,6 +20,7 @@
 #include <memory>
 #include <set>
 #include <optional>
+#include <vector>
 #include <functional>
 // Workaround: below two has to be included in such order to ensure no warnings
 //             about macro redefinitions. Some of the macros in Rapl.hpp are already
@@ -110,7 +111,8 @@ class Eco
     PowAndPerfResult checkPowerAndPerformance(int);
     void reportResult(double = 0.0, double = 0.0);
     void waitForTuningTrigger(int&, int);
-    void execPhase(int, int&, int, PowAndPerfResult&);
+    void execPhase(int, int&, int, PowAndPerfResult&,
+        const std::optional<std::vector<unsigned long>>& perGpuCapsMicroW = std::nullopt);
     int mainAppProcess(char* const*, int&);
     int& adjustHighPowLimit(PowAndPerfResult, int&);
 

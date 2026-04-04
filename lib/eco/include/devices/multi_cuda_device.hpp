@@ -29,7 +29,8 @@
 class MultiCudaDevice : public Device
 {
   public:
-    explicit MultiCudaDevice(const std::vector<int>& deviceIds);
+    /// When \p asyncIndependentPerGpuCaps is true (DEPO --async with multiple GPUs), each GPU can use a different power cap.
+    explicit MultiCudaDevice(const std::vector<int>& deviceIds, bool asyncIndependentPerGpuCaps = false);
     ~MultiCudaDevice() override = default;
 
     // Device interface
@@ -37,6 +38,9 @@ class MultiCudaDevice : public Device
     std::pair<unsigned, unsigned> getMinMaxLimitInWatts() const override;
     double getPowerLimitInWatts() const override;
     void setPowerLimitInMicroWatts(unsigned long limitInMicroW) override;
+    void setPowerLimitsPerGpuMicroWatts(const std::vector<unsigned long>& microWattsPerSubdevice) override;
+    bool usesIndependentSubdevicePowerCaps() const override { return asyncIndependentPerGpuCaps_; }
+    std::vector<unsigned long> getCurrentPerGpuCapsMicroWatts() const override { return currentCapsMicroW_; }
     void reset() override;
     double getCurrentPowerInWatts(std::optional<Domain> = std::nullopt) const override;
     unsigned long long int getPerfCounter() const override;
@@ -47,7 +51,12 @@ class MultiCudaDevice : public Device
     double getCurrentPowerInWattsForSubdevice(size_t index) const override;
     std::string getSubdeviceLabel(size_t index) const override { return std::string("gpu") + std::to_string(deviceIDs_.at(index)); }
 
+    /// Run stock single-GPU search on one GPU: \p baselineCaps holds fixed limits for all GPUs; only index \p focusIndex is swept.
+    void beginPerGpuSearchSession(size_t focusIndex, const std::vector<unsigned long>& baselineCapsMicroW);
+    void endPerGpuSearchSession();
+
   private:
+    void applyPerGpuVectorMicroWatts_(const std::vector<unsigned long>& capsMicroW);
     void initDeviceHandles();
     void validateHomogeneousModel() const;
 
@@ -56,6 +65,11 @@ class MultiCudaDevice : public Device
     std::vector<int> deviceIDs_;
     std::vector<nvmlDevice_t> deviceHandles_;
     std::vector<double> defaultPowerLimitInWatts_;
+    bool asyncIndependentPerGpuCaps_ {false};
+    std::vector<unsigned long> currentCapsMicroW_;
+    bool inPerGpuSearchSession_ {false};
+    size_t searchFocusIndex_ {0};
+    std::vector<unsigned long> searchBaselineCapsMicroW_;
 };
 
 

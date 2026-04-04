@@ -16,7 +16,9 @@
 
 #include <iostream>
 #include <iomanip>
+#include <numeric>
 #include "eco.hpp"
+#include "devices/multi_cuda_device.hpp"
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <cerrno>
@@ -305,10 +307,20 @@ void Eco::execPhase(
     int powerCap_uW,
     int& status,
     int childPID,
-    PowAndPerfResult& refResult)
+    PowAndPerfResult& refResult,
+    const std::optional<std::vector<unsigned long>>& perGpuCapsMicroW)
 {
     int repetitionPeriodInUs = cfg_.repeatTuningPeriodInSec_ * 1e6 + cfg_.usTestPhasePeriod_;
-    device_->setPowerLimitInMicroWatts(powerCap_uW);
+    if (perGpuCapsMicroW.has_value()
+        && perGpuCapsMicroW->size() == device_->getNumSubdevices()
+        && device_->usesIndependentSubdevicePowerCaps())
+    {
+        device_->setPowerLimitsPerGpuMicroWatts(*perGpuCapsMicroW);
+    }
+    else
+    {
+        device_->setPowerLimitInMicroWatts(static_cast<unsigned long>(powerCap_uW));
+    }
     printLine();
     // Console: print per-subdevice current powers when applicable
     if (device_->getNumSubdevices() > 1)
@@ -440,12 +452,57 @@ FinalPowerAndPerfResult Eco::runAppWithSearch(
             PowAndPerfResult referenceRun;
             while (status)
             {
+                std::optional<std::vector<unsigned long>> perGpuCapsForExec;
                 testTime += measureDuration([&, this] {
                     referenceRun = checkPowerAndPerformance(cfg_.referenceRunMultiplier_ * cfg_.usTestPhasePeriod_);
                     logger_.logPowerLogLine(devStateGlobal_, referenceRun);
-                    bestResultCapInMicroWatts = algorithm(device_, devStateGlobal_, trigger_, targerMetric, referenceRun, status, childProcId, cfg_.msPause_, cfg_.msTestPhasePeriod_, logger_);
+                    if (device_->usesIndependentSubdevicePowerCaps())
+                    {
+                        auto* m = dynamic_cast<MultiCudaDevice*>(device_.get());
+                        const auto minMaxW = device_->getMinMaxLimitInWatts();
+                        const unsigned long maxU = static_cast<unsigned long>(minMaxW.second) * 1000000UL;
+                        std::vector<unsigned long> caps(m->getNumSubdevices(), maxU);
+                        m->setPowerLimitsPerGpuMicroWatts(caps);
+                        for (size_t gi = 0; gi < m->getNumSubdevices(); ++gi)
+                        {
+                            m->beginPerGpuSearchSession(gi, caps);
+                            const unsigned bestMicro = algorithm(
+                                device_,
+                                devStateGlobal_,
+                                trigger_,
+                                targerMetric,
+                                referenceRun,
+                                status,
+                                childProcId,
+                                cfg_.msPause_,
+                                cfg_.msTestPhasePeriod_,
+                                logger_);
+                            m->endPerGpuSearchSession();
+                            caps[gi] = bestMicro;
+                            m->setPowerLimitsPerGpuMicroWatts(caps);
+                        }
+                        const unsigned long long sumCaps =
+                            std::accumulate(caps.begin(), caps.end(), 0ULL);
+                        bestResultCapInMicroWatts = static_cast<int>(
+                            sumCaps / std::max<size_t>(1, caps.size()));
+                        perGpuCapsForExec = caps;
+                    }
+                    else
+                    {
+                        bestResultCapInMicroWatts = static_cast<int>(algorithm(
+                            device_,
+                            devStateGlobal_,
+                            trigger_,
+                            targerMetric,
+                            referenceRun,
+                            status,
+                            childProcId,
+                            cfg_.msPause_,
+                            cfg_.msTestPhasePeriod_,
+                            logger_));
+                    }
                 });
-                execPhase(bestResultCapInMicroWatts, status, childProcId, referenceRun);
+                execPhase(bestResultCapInMicroWatts, status, childProcId, referenceRun, perGpuCapsForExec);
                 device_->restoreDefaultLimits();
             }
         }

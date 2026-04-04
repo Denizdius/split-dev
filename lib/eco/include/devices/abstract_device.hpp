@@ -53,5 +53,17 @@ public:
     */
     virtual void triggerPowerApiSample() = 0;
 
+    /// True when multi-GPU async mode: each subdevice can have a different power cap (e.g. DEPO --async).
+    virtual bool usesIndependentSubdevicePowerCaps() const { return false; }
+    /// Apply one limit per subdevice (micro-watts). Default: use the first entry as a single cap.
+    virtual void setPowerLimitsPerGpuMicroWatts(const std::vector<unsigned long>& microWattsPerSubdevice)
+    {
+        if (!microWattsPerSubdevice.empty())
+        {
+            setPowerLimitInMicroWatts(microWattsPerSubdevice.front());
+        }
+    }
+    virtual std::vector<unsigned long> getCurrentPerGpuCapsMicroWatts() const { return {}; }
+
 private:
 };

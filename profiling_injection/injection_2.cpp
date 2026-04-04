@@ -44,6 +44,9 @@ using ::std::unordered_set;
 using ::std::vector;
 
 #include <stdlib.h>
+#include <string.h>
+
+#include <algorithm>
 
 // CUDA headers
 #include <cuda.h>
@@ -296,6 +299,66 @@ EndSession(
 std::ofstream kernelCounterFile;
 unsigned long long int globalCounter = 0;
 
+// DEPO async multi-GPU: per-GPU kernel counts; kernels_count = sum (total activity on targets).
+static std::vector<int> depoTargetGpuIds;
+static bool depoAsyncMultiGpuEnabled = false;
+static std::unordered_map<int, unsigned long long> perDeviceKernelCounts;
+
+static void
+ParseDepoAsyncEnv()
+{
+    static bool parsed = false;
+    if (parsed)
+    {
+        return;
+    }
+    parsed = true;
+    const char *async = getenv("DEPO_ASYNC_MULTI_GPU");
+    const char *ids = getenv("DEPO_TARGET_GPU_IDS");
+    if (!async || strcmp(async, "1") != 0 || !ids || ids[0] == '\0')
+    {
+        return;
+    }
+    depoAsyncMultiGpuEnabled = true;
+    std::string s(ids);
+    size_t start = 0;
+    while (start < s.size())
+    {
+        size_t comma = s.find(',', start);
+        if (comma == std::string::npos)
+        {
+            comma = s.size();
+        }
+        std::string token = s.substr(start, comma - start);
+        if (!token.empty())
+        {
+            depoTargetGpuIds.push_back(atoi(token.c_str()));
+        }
+        start = comma + 1;
+    }
+    if (depoTargetGpuIds.empty())
+    {
+        depoAsyncMultiGpuEnabled = false;
+    }
+}
+
+static void
+WriteKernelsCountFile(unsigned long long value)
+{
+    kernelCounterFile.open("kernels_count", std::ios::out | std::ios::trunc);
+    kernelCounterFile << value << std::flush;
+    kernelCounterFile.close();
+}
+
+static void
+WritePerGpuKernelCountFile(int deviceId, unsigned long long value)
+{
+    std::string name = std::string("kernels_gpu_") + std::to_string(deviceId);
+    kernelCounterFile.open(name.c_str(), std::ios::out | std::ios::trunc);
+    kernelCounterFile << value << std::flush;
+    kernelCounterFile.close();
+}
+
 // Clean up at end of execution
 static void
 EndExecution()
@@ -340,13 +403,86 @@ ProfilerCallbackHandler(
             // On entry, enable / update profiling as needed
             if (pData->callbackSite == CUPTI_API_ENTER)
             {
-                ++globalCounter;
-                if (globalCounter % contextData[ctx].maxNumRanges == 0)
+                ParseDepoAsyncEnv();
+                ctxDataMutex.lock();
+
+                if (depoAsyncMultiGpuEnabled && !depoTargetGpuIds.empty())
                 {
-                    kernelCounterFile.open("kernels_count", std::ios::out | std::ios::trunc);
-                    kernelCounterFile << globalCounter << std::flush;
-                    kernelCounterFile.close();
+                    int maxNumRanges = 1;
+                    const char *pEnvVar = getenv("INJECTION_KERNEL_COUNT");
+                    if (pEnvVar != NULL)
+                    {
+                        int v = atoi(pEnvVar);
+                        if (v >= 1)
+                        {
+                            maxNumRanges = v;
+                        }
+                    }
+                    if (contextData.count(ctx) > 0)
+                    {
+                        maxNumRanges = contextData[ctx].maxNumRanges;
+                        const int devId = contextData[ctx].deviceId;
+                        for (int tid : depoTargetGpuIds)
+                        {
+                            if (tid == devId)
+                            {
+                                perDeviceKernelCounts[devId]++;
+                                break;
+                            }
+                        }
+                    }
+                    ++globalCounter;
+
+                    unsigned long long sumKernels = 0ULL;
+                    for (int tid : depoTargetGpuIds)
+                    {
+                        auto it = perDeviceKernelCounts.find(tid);
+                        const unsigned long long c =
+                            (it == perDeviceKernelCounts.end()) ? 0ULL : it->second;
+                        sumKernels += c;
+                    }
+                    if (sumKernels > 0ULL
+                        && maxNumRanges > 0
+                        && (sumKernels % static_cast<unsigned long long>(maxNumRanges)) == 0ULL)
+                    {
+                        WriteKernelsCountFile(sumKernels);
+                        for (int tid : depoTargetGpuIds)
+                        {
+                            auto it = perDeviceKernelCounts.find(tid);
+                            const unsigned long long c =
+                                (it == perDeviceKernelCounts.end()) ? 0ULL : it->second;
+                            WritePerGpuKernelCountFile(tid, c);
+                        }
+                    }
                 }
+                else
+                {
+                    ++globalCounter;
+                    int maxNumRanges = 10;
+                    if (contextData.count(ctx) > 0)
+                    {
+                        maxNumRanges = contextData[ctx].maxNumRanges;
+                    }
+                    else
+                    {
+                        char *pEnvVar = getenv("INJECTION_KERNEL_COUNT");
+                        if (pEnvVar != NULL)
+                        {
+                            int v = atoi(pEnvVar);
+                            if (v >= 1)
+                            {
+                                maxNumRanges = v;
+                            }
+                        }
+                    }
+                    if (maxNumRanges > 0
+                        && (globalCounter % static_cast<unsigned long long>(maxNumRanges)) == 0ULL)
+                    {
+                        WriteKernelsCountFile(globalCounter);
+                    }
+                }
+
+                ctxDataMutex.unlock();
                 // // Check for this context in the configured contexts
                 // // If not configured, it isn't compatible with profiling
                 // ctxDataMutex.lock();
@@ -482,6 +618,8 @@ InitializeInjection()
     if (injectionInitialized == false)
     {
         injectionInitialized = true;
+
+        ParseDepoAsyncEnv();
 
         // Read in optional list of metrics to gather
         char *pMetricEnv = getenv("INJECTION_METRICS");
