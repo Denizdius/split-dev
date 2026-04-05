@@ -18,6 +18,7 @@
 #include <iomanip>
 #include <numeric>
 #include "eco.hpp"
+#include "devices/abstract_device.hpp"
 #include "devices/multi_cuda_device.hpp"
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -34,6 +35,33 @@ namespace fs = std::filesystem;
 std::atomic<bool> external_trigger_flag(false);
 std::atomic<bool> stop_flag(false);
 const std::string trigger_file_path = "/tmp/trigger_file";
+
+namespace {
+
+void printMultiGpuMonitoringHeader(const std::shared_ptr<Device>& device)
+{
+    std::cout << std::fixed << std::setprecision(2);
+    std::cout << "#t[ms]";
+    for (size_t i = 0; i < device->getNumSubdevices(); ++i)
+    {
+        std::cout << "\tP_gpu" << device->getSubdeviceLabel(i) << "[W]"
+                  << "\tCap_gpu" << device->getSubdeviceLabel(i) << "[W]";
+    }
+    std::cout << "\n";
+}
+
+void printMultiGpuMonitoringRow(const std::shared_ptr<Device>& device, double timeMs)
+{
+    std::cout << std::fixed << std::setprecision(0) << timeMs << "\t" << std::setprecision(2);
+    for (size_t i = 0; i < device->getNumSubdevices(); ++i)
+    {
+        std::cout << "\t" << device->getCurrentPowerInWattsForSubdevice(i)
+                  << "\t" << device->getPowerLimitInWattsForSubdevice(i);
+    }
+    std::cout << "\n";
+}
+
+} // namespace
 
 void monitor_trigger_file() {
     auto last_write_time = fs::last_write_time(trigger_file_path);
@@ -120,13 +148,7 @@ void Eco::singleAppRunAndPowerSample(char* const* argv) {
     if (device_->getNumSubdevices() > 1)
     {
         logger_.setMuteConsole(true); // avoid duplicate lines from BothStream (console + file)
-        std::cout << std::fixed << std::setprecision(2);
-        std::cout << "#t[ms]\tP_cap[W]";
-        for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
-        {
-            std::cout << "\tP_gpu" << device_->getSubdeviceLabel(i) << "[W]";
-        }
-        std::cout << "\n";
+        printMultiGpuMonitoringHeader(device_);
     }
 
     int fd = open("EP_stdout.txt", O_WRONLY|O_TRUNC|O_CREAT, 0644);
@@ -163,15 +185,7 @@ void Eco::singleAppRunAndPowerSample(char* const* argv) {
             logger_.logPowerLogLine(devStateGlobal_, tmp);
             if (device_->getNumSubdevices() > 1)
             {
-                std::cout << std::fixed << std::setprecision(0)
-                          << devStateGlobal_.getTimeSinceObjectCreation() << "\t"
-                          << std::setprecision(2)
-                          << tmp.appliedPowerCapInWatts_;
-                for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
-                {
-                    std::cout << "\t" << device_->getCurrentPowerInWattsForSubdevice(i);
-                }
-                std::cout << "\n";
+                printMultiGpuMonitoringRow(device_, devStateGlobal_.getTimeSinceObjectCreation());
             }
         } else if (result == -1) {
             // waitpid error
@@ -326,13 +340,7 @@ void Eco::execPhase(
     if (device_->getNumSubdevices() > 1)
     {
         logger_.setMuteConsole(true); // avoid duplicate lines from BothStream (console + file)
-        std::cout << std::fixed << std::setprecision(2);
-        std::cout << "#t[ms]\tP_cap[W]";
-        for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
-        {
-            std::cout << "\tP_gpu" << device_->getSubdeviceLabel(i) << "[W]";
-        }
-        std::cout << "\n";
+        printMultiGpuMonitoringHeader(device_);
     }
     while (status && repetitionPeriodInUs > 0)
     {
@@ -342,15 +350,7 @@ void Eco::execPhase(
         logger_.logPowerLogLine(devStateGlobal_, papResult, refResult);
         if (device_->getNumSubdevices() > 1)
         {
-            std::cout << std::fixed << std::setprecision(0)
-                      << devStateGlobal_.getTimeSinceObjectCreation() << "\t"
-                      << std::setprecision(2)
-                      << papResult.appliedPowerCapInWatts_;
-            for (size_t i = 0; i < device_->getNumSubdevices(); ++i)
-            {
-                std::cout << "\t" << device_->getCurrentPowerInWattsForSubdevice(i);
-            }
-            std::cout << "\n";
+            printMultiGpuMonitoringRow(device_, devStateGlobal_.getTimeSinceObjectCreation());
         }
         waitpid(childPID, &status, WNOHANG);
         if (external_trigger_flag.load())

@@ -286,6 +286,15 @@ double MultiCudaDevice::getCurrentPowerInWattsForSubdevice(size_t index) const
   return static_cast<double>(powerMw) / 1000.0;
 }
 
+double MultiCudaDevice::getPowerLimitInWattsForSubdevice(size_t index) const
+{
+  if (index >= deviceIDs_.size()) return -1.0;
+  unsigned currMw = 0;
+  if (nvmlDeviceGetEnforcedPowerLimit(deviceHandles_[deviceIDs_[index]], &currMw) != NVML_SUCCESS)
+    return -1.0;
+  return static_cast<double>(currMw) / 1000.0;
+}
+
 unsigned long long int MultiCudaDevice::getPerfCounter() const
 {
   // Reuse the same perf counter source (injection library aggregates at process level)

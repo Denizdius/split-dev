@@ -49,6 +49,7 @@ class MultiCudaDevice : public Device
     std::string getDeviceTypeString() const override { return "gpu"; }
     size_t getNumSubdevices() const override { return deviceIDs_.size(); }
     double getCurrentPowerInWattsForSubdevice(size_t index) const override;
+    double getPowerLimitInWattsForSubdevice(size_t index) const override;
     std::string getSubdeviceLabel(size_t index) const override { return std::string("gpu") + std::to_string(deviceIDs_.at(index)); }
 
     /// Run stock single-GPU search on one GPU: \p baselineCaps holds fixed limits for all GPUs; only index \p focusIndex is swept.

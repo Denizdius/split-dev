@@ -160,6 +160,8 @@ When using the GPU backend, DEPO accepts a single device id or a comma-separated
 
 - **Build/runtime:** GPU injection requires building the profiling injection library (e.g. under `profiling_injection`) and making its path available to DEPO (see `CUDA_INJECTION64_PATH` / `/tmp/depo_gpu_path` as used in your environment). Power capping still requires appropriate privileges (e.g. `sudo` on typical Linux setups), consistent with other DEPO GPU usage notes in this document.
 
+- **Console monitoring (multi-GPU):** When more than one subdevice is active, the live table uses time in ms, then for each GPU **instantaneous power** and **enforced cap** columns in pairs: `P_gpu<id>[W]`, `Cap_gpu<id>[W]` (NVML per-GPU limit), instead of a single combined `P_cap` column.
+
 ### Available search modes in DEPO
 In DEPO there are several optimization modes available:
 1. **Just power sampling**, which launches the application and monitors and reports power and energy consumption when finished, available when `--no-tuning` parameter is passed.
