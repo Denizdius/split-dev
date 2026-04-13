@@ -83,7 +83,9 @@ PowAndPerfResult DeviceStateAccumulator::getCurrentPowerAndPerf(std::optional<st
     double perfCounterDelta = (double)(next_.kernelsCount_ - curr_.kernelsCount_);
     if (trigger.has_value())
     {
-        trigger->get().appendPowerSampleToSmaFilter(next_.power_);
+        // For multi-GPU devices, Wait Phase should be driven by a single-GPU power signal (device-defined),
+        // not necessarily by the sum across all GPUs used for energy accounting/logging.
+        trigger->get().appendPowerSampleToSmaFilter(device_->getTriggerPowerInWatts());
         trigger->get().updateComputeActivityFlag(perfCounterDelta > 0.0);
     }
     double timeDeltaMilliSeconds = std::chrono::duration_cast<std::chrono::milliseconds>(next_.time_ - curr_.time_).count();

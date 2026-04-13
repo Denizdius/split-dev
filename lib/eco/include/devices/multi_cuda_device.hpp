@@ -44,6 +44,7 @@ class MultiCudaDevice : public Device
     void reset() override;
     double getCurrentPowerInWatts(std::optional<Domain> = std::nullopt) const override;
     unsigned long long int getPerfCounter() const override;
+    double getTriggerPowerInWatts() const override { return getCurrentPowerInWattsForSubdevice(0); }
     void triggerPowerApiSample() override {}
     void restoreDefaultLimits() override;
     std::string getDeviceTypeString() const override { return "gpu"; }

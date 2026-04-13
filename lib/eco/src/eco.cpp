@@ -44,8 +44,10 @@ void printMultiGpuMonitoringHeader(const std::shared_ptr<Device>& device)
     std::cout << "#t[ms]";
     for (size_t i = 0; i < device->getNumSubdevices(); ++i)
     {
-        std::cout << "\tP_gpu" << device->getSubdeviceLabel(i) << "[W]"
-                  << "\tCap_gpu" << device->getSubdeviceLabel(i) << "[W]";
+        const auto label = device->getSubdeviceLabel(i);
+        // Prefer "gpu0" style labels from device; avoid double "gpu" prefixing.
+        std::cout << "\tCap_" << label << "[W]"
+                  << "\tP_" << label << "[W]";
     }
     std::cout << "\n";
 }
@@ -55,8 +57,8 @@ void printMultiGpuMonitoringRow(const std::shared_ptr<Device>& device, double ti
     std::cout << std::fixed << std::setprecision(0) << timeMs << "\t" << std::setprecision(2);
     for (size_t i = 0; i < device->getNumSubdevices(); ++i)
     {
-        std::cout << "\t" << device->getCurrentPowerInWattsForSubdevice(i)
-                  << "\t" << device->getPowerLimitInWattsForSubdevice(i);
+        std::cout << "\t" << device->getPowerLimitInWattsForSubdevice(i)
+                  << "\t" << device->getCurrentPowerInWattsForSubdevice(i);
     }
     std::cout << "\n";
 }

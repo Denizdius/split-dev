@@ -44,6 +44,8 @@ public:
     /// Enforced NVML/RAPL power limit for subdevice \p index (watts); default mirrors getPowerLimitInWatts().
     virtual double getPowerLimitInWattsForSubdevice(size_t /*index*/) const { return getPowerLimitInWatts(); }
     virtual std::string getSubdeviceLabel(size_t index) const { return std::to_string(index); }
+    /// Power signal used for Wait Phase (doWaitPhase) SMA trigger. Default is overall device power.
+    virtual double getTriggerPowerInWatts() const { return getCurrentPowerInWatts(std::nullopt); }
     /*
       triggerPowerApiSample - used to trigger next sample from Power Management API
 
