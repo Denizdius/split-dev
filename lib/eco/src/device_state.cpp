@@ -49,7 +49,13 @@ DeviceStateAccumulator& DeviceStateAccumulator::sample()
     device_->triggerPowerApiSample();
     // for other devices like NVIDIA it is handled by the API (e.g., NVML)
     // ------------------------------------------------------------------
-    const auto  perfCounter = device_->getPerfCounter();
+    auto perfCounter = device_->getPerfCounter();
+    // Several processes used to overwrite one counter file, so the value
+    // jumped backwards and this unsigned subtraction wrapped to ~2^64.
+    if (perfCounter < curr_.kernelsCount_)
+    {
+        perfCounter = curr_.kernelsCount_;
+    }
 
     next_ = PowerAndPerfState(
         device_->getCurrentPowerInWatts(std::nullopt),

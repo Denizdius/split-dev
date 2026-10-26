@@ -3,6 +3,7 @@
 */
 
 #include "devices/multi_cuda_device.hpp"
+#include "devices/kernel_counter.hpp"
 
 #include <sstream>
 #include <algorithm>
@@ -52,23 +53,6 @@ MultiCudaDevice::MultiCudaDevice(const std::vector<int>& deviceIds, bool asyncIn
     else
       currentCapsMicroW_[i] = 0UL;
   }
-}
-
-// Local helper to read an integer value from a file; returns -1 if not available
-static inline long long readValueFromFile(const std::string& fileName)
-{
-  std::ifstream file(fileName.c_str());
-  std::string line;
-  long long value = -1;
-  if (file.is_open())
-  {
-    while (std::getline(file, line))
-    {
-      value = std::atoll(line.c_str());
-    }
-    file.close();
-  }
-  return value;
 }
 
 void MultiCudaDevice::initDeviceHandles()
@@ -131,7 +115,7 @@ std::pair<unsigned, unsigned> MultiCudaDevice::getMinMaxLimitInWatts() const
     }
   }
   if (globalMaxW < globalMinW) globalMaxW = globalMinW;
-  return {globalMinW, globalMaxW};
+  return applySearchBounds({globalMinW, globalMaxW});
 }
 
 double MultiCudaDevice::getPowerLimitInWatts() const
@@ -243,25 +227,7 @@ void MultiCudaDevice::setPowerLimitsPerGpuMicroWatts(const std::vector<unsigned 
 
 void MultiCudaDevice::reset()
 {
-  std::ofstream kernelCounterFile;
-  kernelCounterFile.open("kernels_count", std::ios::out | std::ios::trunc);
-  if (kernelCounterFile.is_open())
-  {
-    kernelCounterFile << "0";
-    kernelCounterFile.close();
-  }
-  if (asyncIndependentPerGpuCaps_)
-  {
-    for (int id : deviceIDs_)
-    {
-      std::string name = std::string("kernels_gpu_") + std::to_string(id);
-      std::ofstream f(name.c_str(), std::ios::out | std::ios::trunc);
-      if (f.is_open())
-      {
-        f << "0";
-      }
-    }
-  }
+  clearDepoKernelCounterFiles();
 }
 
 double MultiCudaDevice::getCurrentPowerInWatts(std::optional<Domain>) const
@@ -297,13 +263,7 @@ double MultiCudaDevice::getPowerLimitInWattsForSubdevice(size_t index) const
 
 unsigned long long int MultiCudaDevice::getPerfCounter() const
 {
-  // Reuse the same perf counter source (injection library aggregates at process level)
-  // Non-blocking: if the file is not present yet, return 0
-  long long kernelsCountTmp = readValueFromFile("./kernels_count");
-  if (kernelsCountTmp < 0) {
-    return 0ULL;
-  }
-  return static_cast<unsigned long long>(kernelsCountTmp);
+  return sumDepoKernelCountFiles();
 }
 
 void MultiCudaDevice::restoreDefaultLimits()

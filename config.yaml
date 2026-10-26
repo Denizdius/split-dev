@@ -10,6 +10,9 @@ k: 2.0                     # this is parameter for EDS metric
 msTestPhasePeriod: 1200    # this is DEPO specific parameter and decides on Tuning Time window size, in milliseconds
 repeatTuningPeriodInSec: 0 # this parameter is DEPO specific and turns on and off periodic Tuning Phase repetition, if non-zero the periodic Tuning phase will be repeated with the given period in seconds
 doWaitPhase: 1             # this parameter is DEPO specific and turns on and off SMA Power filter based Wait Phase before Tuning Phase
+tuningStartDelaySec: 60    # seconds before the first reference window and search; 0 keeps the old immediate start
+testPhaseRepeats: 1        # test phases accumulated per search candidate; 1 keeps a single measurement
+keepCapBandW: 40           # with --keep-cap, later searches stay within this many watts of the kept cap
 referenceRunMultiplier: 1  # this parameter is DEPO specific and allows for increasing the reference measurement Tuning Time Window for better precision
 targetMetric: 0            # 0-E, 1-EDP, 2-EDS # selection of target metric specific to DEPO - might be updated soon
 

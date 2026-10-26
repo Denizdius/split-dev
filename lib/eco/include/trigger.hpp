@@ -80,6 +80,19 @@ class Trigger
     {
       hasDeviceReportedAnyComputeActivityThroughPerfCounter_ =
           hasDeviceReportedAnyComputeActivityThroughPerfCounter_ || computeActivityOfDeviceCondition;
+      if (computeActivityOfDeviceCondition)
+      {
+        consecutiveActiveSamples_++;
+      }
+      else
+      {
+        consecutiveActiveSamples_ = 0;
+      }
+    }
+
+    int consecutiveActiveSamples() const
+    {
+      return consecutiveActiveSamples_;
     }
 
     bool isTuningPeriodic() const
@@ -94,4 +107,5 @@ class Trigger
     double TRESHOLD {0.03};
     bool hasDeviceReportedAnyComputeActivityThroughPerfCounter_ {false};
     bool isTuningPeriodic_ {false};
+    int consecutiveActiveSamples_ {0};
 };

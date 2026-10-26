@@ -47,6 +47,28 @@ class GoldenSectionSearchAlgorithm : public SearchAlgorithm
         bool measureR = true;
 
         PowAndPerfResult tmp = reference;
+        const int repeats = device->searchSampleRepeats() < 1 ? 1 : device->searchSampleRepeats();
+        auto measureCandidate = [&](int limitMicro) {
+            device->setPowerLimitInMicroWatts(static_cast<unsigned long>(limitMicro));
+            PowAndPerfResult acc;
+            for (int r = 0; r < repeats; ++r)
+            {
+                auto sample = sampleAndAccumulatePowAndPerfForGivenPeriod(
+                    tuningTimeWindowInMilliSeconds * 1000,
+                    powerSamplingPeriodInMilliSeconds,
+                    deviceState,
+                    trigger,
+                    procStatus,
+                    childProcID,
+                    logger);
+                logger.logPowerLogLine(deviceState, sample, reference);
+                if (r == 0) acc = sample;
+                else acc += sample;
+                waitpid(childProcID, &procStatus, WNOHANG);
+                if (!procStatus) break;
+            }
+            return acc;
+        };
 
         while ((b - a) > EPSILON)
         {
@@ -54,30 +76,12 @@ class GoldenSectionSearchAlgorithm : public SearchAlgorithm
           auto fL = tmp;
           if (measureL)
           {
-            device->setPowerLimitInMicroWatts(leftCandidateInMicroiWatts);
-            fL = sampleAndAccumulatePowAndPerfForGivenPeriod(
-              tuningTimeWindowInMilliSeconds * 1000,
-              powerSamplingPeriodInMilliSeconds,
-              deviceState,
-              trigger,
-              procStatus,
-              childProcID,
-              logger);
-            logger.logPowerLogLine(deviceState, fL, reference);
+            fL = measureCandidate(leftCandidateInMicroiWatts);
           }
           auto fR = tmp;
           if (measureR)
           {
-            device->setPowerLimitInMicroWatts(rightCandidateInMicroWatts);
-            fR = sampleAndAccumulatePowAndPerfForGivenPeriod(
-              tuningTimeWindowInMilliSeconds * 1000,
-              powerSamplingPeriodInMilliSeconds,
-              deviceState,
-              trigger,
-              procStatus,
-              childProcID,
-              logger);
-            logger.logPowerLogLine(deviceState, fR, reference);
+            fR = measureCandidate(rightCandidateInMicroWatts);
           }
 
           if (!fL.isRightBetter(fR, metric)) {

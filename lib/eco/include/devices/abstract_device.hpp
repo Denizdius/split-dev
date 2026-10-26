@@ -59,6 +59,21 @@ public:
 
     /// True when multi-GPU async mode: each subdevice can have a different power cap (e.g. DEPO --async).
     virtual bool usesIndependentSubdevicePowerCaps() const { return false; }
+    /// Optional search range in watts. Empty means the hardware min/max.
+    void setSearchBoundsInWatts(std::optional<std::pair<unsigned, unsigned>> bounds) { searchBoundsW_ = std::move(bounds); }
+    /// How many test phases to accumulate at each candidate. 1 keeps the original single measurement.
+    void setSearchSampleRepeats(int repeats) { searchSampleRepeats_ = repeats < 1 ? 1 : repeats; }
+    int searchSampleRepeats() const { return searchSampleRepeats_; }
+    std::pair<unsigned, unsigned> applySearchBounds(std::pair<unsigned, unsigned> hardware) const
+    {
+        if (!searchBoundsW_) return hardware;
+        unsigned lo = hardware.first;
+        unsigned hi = hardware.second;
+        if (searchBoundsW_->first > lo) lo = searchBoundsW_->first;
+        if (searchBoundsW_->second < hi) hi = searchBoundsW_->second;
+        if (hi <= lo) return hardware;
+        return {lo, hi};
+    }
     /// Apply one limit per subdevice (micro-watts). Default: use the first entry as a single cap.
     virtual void setPowerLimitsPerGpuMicroWatts(const std::vector<unsigned long>& microWattsPerSubdevice)
     {
@@ -70,4 +85,6 @@ public:
     virtual std::vector<unsigned long> getCurrentPerGpuCapsMicroWatts() const { return {}; }
 
 private:
+    std::optional<std::pair<unsigned, unsigned>> searchBoundsW_;
+    int searchSampleRepeats_ {1};
 };

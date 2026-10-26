@@ -90,10 +90,19 @@ class Eco
     double getK() { return cfg_.k_; } // temporary getter until Eco is reorganised
     void setCustomK(double k) { cfg_.k_ = k; } // temporary setter until Eco is reorganised
     int getNumIterations() { return cfg_.numIterations_; }
+    void enablePersistentKernelTrigger() { cfg_.persistentKernelTrigger_ = true; }
+    void enableDecisionLog() { logDecisions_ = true; }
+    void enableKeepCap() { keepCap_ = true; }
+    void enablePairCheck() { pairCheck_ = true; }
+    const std::vector<double>& lastPerGpuCapsWatts() const { return lastPerGpuCapsW_; }
 
   protected:
   private:
     ParamsConfig cfg_; // stores defaults values of params or reads it from config.yaml
+    bool logDecisions_ {false};
+    bool keepCap_ {false};
+    bool pairCheck_ {false};
+    std::vector<double> lastPerGpuCapsW_;
     Trigger trigger_;
     std::shared_ptr<Device> device_;
     CrossDomainQuantity idleAvPow_;

@@ -124,6 +124,10 @@ void cleanArgv(int& argc, char* argv[])
             flag == "--eds" ||
             flag == "--no-tuning" ||
             flag == "--async" ||
+            flag == "--persistent-kernel" ||
+            flag == "--log" ||
+            flag == "--keep-cap" ||
+            flag == "--pair-check" ||
             std::string(flag).substr(0,6) == "--gpu="
             )
         {
@@ -193,6 +197,10 @@ int main (int argc, char *argv[])
         ("no-tuning", "run app only checking the power and energy consumption")
         ("gpu", po::value<std::string>(), "use GPU backend; accept single ID (e.g., 0) or comma-separated list (e.g., 0,1,2)")
         ("async", "multi-GPU only: same Linear/GSS as single-GPU, once per GPU (other GPUs fixed); CUPTI counts all targets; caps may differ. Not /tmp/trigger_file async tuning")
+        ("persistent-kernel", "start tuning only after kernel activity stays present for about 2 seconds")
+        ("log", "print one line per GPU search and at the start of each execution phase")
+        ("keep-cap", "keep power caps after the execution phase and search the next period around them")
+        ("pair-check", "async only: before the execution phase, keep both GPUs at the lower cap when that scores better")
     ;
     po::variables_map optionsMap;
     po::store(po::parse_command_line(argc, argv, desc), optionsMap);
@@ -267,6 +275,33 @@ int main (int argc, char *argv[])
     }
 
     std::unique_ptr<Eco> eco = std::make_unique<Eco>(device);
+    if (optionsMap.count("persistent-kernel"))
+    {
+        eco->enablePersistentKernelTrigger();
+        std::cout << "[DEPO] --persistent-kernel: tuning waits for sustained kernel activity.\n";
+    }
+    if (optionsMap.count("log"))
+    {
+        eco->enableDecisionLog();
+        std::cout << "[DEPO] --log: one line per GPU search and at each execution phase.\n";
+    }
+    if (optionsMap.count("keep-cap"))
+    {
+        eco->enableKeepCap();
+        std::cout << "[DEPO] --keep-cap: caps stay on between periods. Later searches stay within keepCapBandW of the kept cap.\n";
+    }
+    if (optionsMap.count("pair-check"))
+    {
+        if (!wantAsyncMultiGpu)
+        {
+            std::cerr << "[DEPO] Warning: --pair-check applies only with --async and more than one GPU; ignoring --pair-check.\n";
+        }
+        else
+        {
+            eco->enablePairCheck();
+            std::cout << "[DEPO] --pair-check: the split caps are compared with both GPUs at the lower cap before the execution phase.\n";
+        }
+    }
     std::stringstream ssout;
     std::stringstream applicationCommand;
     for (int i=1; i<argc; i++) {
@@ -289,6 +324,20 @@ int main (int argc, char *argv[])
     ssout << std::fixed << std::setprecision(3)
          << "# Energy[J]\ttime[s]\tPower[W]\n"
          << result.energy << "\t" << result.time_.totalTime_ << "\t" << result.pkgPower <<"\n";
+    const auto perGpuCaps = eco->lastPerGpuCapsWatts();
+    if (!perGpuCaps.empty())
+    {
+        ssout << "#";
+        for (size_t i = 0; i < perGpuCaps.size(); ++i)
+            ssout << " cap_gpu" << i << "[W]";
+        ssout << "\n";
+        for (size_t i = 0; i < perGpuCaps.size(); ++i)
+        {
+            if (i) ssout << "\t";
+            ssout << perGpuCaps[i];
+        }
+        ssout << "\n";
+    }
 
     eco->logToResultFile(ssout);
     eco->plotPowerLog(result, applicationCommand.str(), printPowerLogWithDynamicMetrics);

@@ -36,6 +36,10 @@ public:
     int isPowerLogOn_ {1};
     int referenceRunMultiplier_{1};
     int repeatTuningPeriodInSec_ {10}; // seconds
+    int tuningStartDelaySec_ {0}; // seconds to wait before the first tuning window
+    int testPhaseRepeats_ {1}; // test phases accumulated at each search candidate
+    int keepCapBandW_ {40}; // watts either side of a kept cap for the next search
+    bool persistentKernelTrigger_ {false};
     double k_ {1.0};
     bool doWaitPhase_ {true};
     void printConfigExplained();

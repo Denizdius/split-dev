@@ -17,6 +17,9 @@
 #include <iostream>
 #include <iomanip>
 #include <numeric>
+#include <chrono>
+#include <cmath>
+#include <sstream>
 #include "eco.hpp"
 #include "devices/abstract_device.hpp"
 #include "devices/multi_cuda_device.hpp"
@@ -92,6 +95,7 @@ Eco::Eco(std::shared_ptr<Device> d) :
         modifyWatchdog(WatchdogStatus::DISABLED);
     }
     device_->reset();
+    device_->setSearchSampleRepeats(cfg_.testPhaseRepeats_);
 }
 
 Eco::~Eco() {
@@ -295,11 +299,43 @@ void Eco::waitForTuningTrigger(int& status, int childPID) {
     // allow tuning to start once filtered power rises noticeably over its initial baseline.
     double baselineFilteredPowerW = -1.0;
     const double powerRiseEpsilonW = 5.0; // minimal rise above baseline to consider activity
-    while ((!trigger_.isDeviceReadyForTuning()) && status)
+    const auto waitStartedAt = std::chrono::steady_clock::now();
+    // About 2 seconds of back-to-back samples that each saw new kernels.
+    const int persistentSamplesNeeded = std::max(
+        3, (2000 + std::max(cfg_.msPause_, 1) - 1) / std::max(cfg_.msPause_, 1));
+    while (status)
     {
         auto papResult = checkPowerAndPerformance(cfg_.usTestPhasePeriod_);
-        // std::cout << FLUSH_AND_RETURN
-        //         << logCurrentResultLine(papResult, papResult, cfg_.k_, true /* no new line */);
+        (void)papResult;
+        waitpid(childPID, &status, WNOHANG);
+        if (!status)
+        {
+            break;
+        }
+        const double elapsedSec = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - waitStartedAt).count();
+        if (cfg_.tuningStartDelaySec_ > 0 && elapsedSec < cfg_.tuningStartDelaySec_)
+        {
+            continue;
+        }
+        // The wait phase keeps its own steady-power rule. Persistent kernels
+        // replace the immediate-mode trigger, which otherwise fires while the model is loading.
+        if (cfg_.persistentKernelTrigger_ && !cfg_.doWaitPhase_)
+        {
+            if (trigger_.consecutiveActiveSamples() >= persistentSamplesNeeded)
+            {
+                std::cout << "[DEPO] Starting tuning after " << elapsedSec
+                          << " s. Persistent kernel samples: "
+                          << trigger_.consecutiveActiveSamples() << ".\n";
+                break;
+            }
+            continue;
+        }
+        if (trigger_.isDeviceReadyForTuning())
+        {
+            std::cout << "[DEPO] Starting tuning after " << elapsedSec << " s.\n";
+            break;
+        }
         // Immediate-mode fallback: if doWaitPhase is off and we detect a significant rise in filtered power
         // compared to the first observed value, proceed to tuning even without perf-counter activity.
         if (!cfg_.doWaitPhase_)
@@ -311,6 +347,8 @@ void Eco::waitForTuningTrigger(int& status, int childPID) {
             }
             else if (currentFilteredPowerW > (baselineFilteredPowerW + powerRiseEpsilonW))
             {
+                std::cout << "[DEPO] Starting tuning after " << elapsedSec
+                          << " s on a power rise.\n";
                 break;
             }
         }
@@ -452,6 +490,31 @@ FinalPowerAndPerfResult Eco::runAppWithSearch(
             }
             //----------------------------------------------------------------------------
             PowAndPerfResult referenceRun;
+            std::vector<unsigned long> keptCapsMicro;
+            auto depoLog = [&](const std::string& msg) {
+                if (!logDecisions_) return;
+                const double tSec = devStateGlobal_.getTimeSinceObjectCreation() / 1000.0;
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(1) << "[DEPO] t=" << tSec << "s " << msg << "\n";
+                std::cout << oss.str() << std::flush;
+            };
+            auto narrowToKept = [&](double centerW) {
+                device_->setSearchBoundsInWatts(std::nullopt);
+                const auto hw = device_->getMinMaxLimitInWatts();
+                const int band = cfg_.keepCapBandW_ < 1 ? 1 : cfg_.keepCapBandW_;
+                int lo = static_cast<int>(std::lround(centerW)) - band;
+                int hi = static_cast<int>(std::lround(centerW)) + band;
+                if (lo < static_cast<int>(hw.first)) lo = static_cast<int>(hw.first);
+                if (hi > static_cast<int>(hw.second)) hi = static_cast<int>(hw.second);
+                if (hi <= lo) return;
+                device_->setSearchBoundsInWatts(std::make_pair(
+                    static_cast<unsigned>(lo), static_cast<unsigned>(hi)));
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(0)
+                    << "keep-cap search band " << lo << "-" << hi
+                    << " W around " << std::setprecision(1) << centerW << " W";
+                depoLog(oss.str());
+            };
             while (status)
             {
                 std::optional<std::vector<unsigned long>> perGpuCapsForExec;
@@ -461,12 +524,17 @@ FinalPowerAndPerfResult Eco::runAppWithSearch(
                     if (device_->usesIndependentSubdevicePowerCaps())
                     {
                         auto* m = dynamic_cast<MultiCudaDevice*>(device_.get());
-                        const auto minMaxW = device_->getMinMaxLimitInWatts();
-                        const unsigned long maxU = static_cast<unsigned long>(minMaxW.second) * 1000000UL;
-                        std::vector<unsigned long> caps(m->getNumSubdevices(), maxU);
+                        device_->setSearchBoundsInWatts(std::nullopt);
+                        const auto hw = device_->getMinMaxLimitInWatts();
+                        const unsigned long maxU = static_cast<unsigned long>(hw.second) * 1000000UL;
+                        const bool resume = keepCap_ && !keptCapsMicro.empty();
+                        std::vector<unsigned long> caps = resume
+                            ? keptCapsMicro
+                            : std::vector<unsigned long>(m->getNumSubdevices(), maxU);
                         m->setPowerLimitsPerGpuMicroWatts(caps);
-                        for (size_t gi = 0; gi < m->getNumSubdevices(); ++gi)
+                        for (size_t gi = 0; gi < m->getNumSubdevices() && status; ++gi)
                         {
+                            if (resume) narrowToKept(static_cast<double>(caps[gi]) / 1e6);
                             m->beginPerGpuSearchSession(gi, caps);
                             const unsigned bestMicro = algorithm(
                                 device_,
@@ -480,8 +548,56 @@ FinalPowerAndPerfResult Eco::runAppWithSearch(
                                 cfg_.msTestPhasePeriod_,
                                 logger_);
                             m->endPerGpuSearchSession();
+                            device_->setSearchBoundsInWatts(std::nullopt);
                             caps[gi] = bestMicro;
                             m->setPowerLimitsPerGpuMicroWatts(caps);
+                            std::ostringstream chosen;
+                            chosen << std::fixed << std::setprecision(1)
+                                   << "search gpu" << gi << " chose " << (bestMicro / 1e6) << " W";
+                            for (size_t j = 0; j < caps.size(); ++j)
+                            {
+                                if (j == gi) continue;
+                                chosen << "; gpu" << j << " held at " << (caps[j] / 1e6) << " W";
+                            }
+                            depoLog(chosen.str());
+                        }
+                        if (pairCheck_ && status && caps.size() > 1)
+                        {
+                            const unsigned long lo = *std::min_element(caps.begin(), caps.end());
+                            const unsigned long hi = *std::max_element(caps.begin(), caps.end());
+                            if (hi > lo + 1000000UL)
+                            {
+                                auto scoreOf = [&](PowAndPerfResult& sample) {
+                                    if (targerMetric == TargetMetric::MIN_M_PLUS)
+                                        sample.checkPlusMetric(referenceRun, cfg_.k_);
+                                    if (targerMetric == TargetMetric::MIN_E) return sample.getEnergyPerInstr();
+                                    if (targerMetric == TargetMetric::MIN_E_X_T) return sample.getEnergyTimeProd();
+                                    return sample.myPlusMetric_;
+                                };
+                                auto splitSample = checkPowerAndPerformance(cfg_.usTestPhasePeriod_);
+                                logger_.logPowerLogLine(devStateGlobal_, splitSample, referenceRun);
+                                const double splitScore = scoreOf(splitSample);
+                                const auto splitCaps = caps;
+                                std::vector<unsigned long> equal(caps.size(), lo);
+                                m->setPowerLimitsPerGpuMicroWatts(equal);
+                                auto equalSample = checkPowerAndPerformance(cfg_.usTestPhasePeriod_);
+                                logger_.logPowerLogLine(devStateGlobal_, equalSample, referenceRun);
+                                const double equalScore = scoreOf(equalSample);
+                                const bool equalBetter = splitSample.isRightBetter(equalSample, targerMetric);
+                                if (equalBetter) caps = equal;
+                                else m->setPowerLimitsPerGpuMicroWatts(splitCaps);
+                                std::ostringstream decision;
+                                decision << std::fixed << std::setprecision(1)
+                                         << "pair check split";
+                                for (unsigned long cap : splitCaps) decision << " " << (cap / 1e6);
+                                decision << " W E=" << std::setprecision(0) << splitSample.energyInJoules_
+                                         << " J score=" << std::setprecision(3) << splitScore
+                                         << "; equal " << (lo / 1e6)
+                                         << " W E=" << std::setprecision(0) << equalSample.energyInJoules_
+                                         << " J score=" << std::setprecision(3) << equalScore
+                                         << (equalBetter ? "; kept equal caps" : "; kept split caps");
+                                std::cout << "[DEPO] " << decision.str() << "\n";
+                            }
                         }
                         const unsigned long long sumCaps =
                             std::accumulate(caps.begin(), caps.end(), 0ULL);
@@ -491,6 +607,8 @@ FinalPowerAndPerfResult Eco::runAppWithSearch(
                     }
                     else
                     {
+                        if (keepCap_ && !lastPerGpuCapsW_.empty())
+                            narrowToKept(lastPerGpuCapsW_.front());
                         bestResultCapInMicroWatts = static_cast<int>(algorithm(
                             device_,
                             devStateGlobal_,
@@ -502,10 +620,45 @@ FinalPowerAndPerfResult Eco::runAppWithSearch(
                             cfg_.msPause_,
                             cfg_.msTestPhasePeriod_,
                             logger_));
+                        device_->setSearchBoundsInWatts(std::nullopt);
+                        std::ostringstream chosen;
+                        chosen << std::fixed << std::setprecision(1)
+                               << "search chose " << (bestResultCapInMicroWatts / 1e6) << " W for every GPU";
+                        depoLog(chosen.str());
                     }
                 });
+                if (perGpuCapsForExec)
+                {
+                    lastPerGpuCapsW_.clear();
+                    std::ostringstream capsMsg;
+                    capsMsg << std::fixed << std::setprecision(1) << "execution phase";
+                    for (size_t i = 0; i < perGpuCapsForExec->size(); ++i)
+                    {
+                        const double watts = perGpuCapsForExec->at(i) / 1e6;
+                        lastPerGpuCapsW_.push_back(watts);
+                        capsMsg << " gpu" << i << "=" << watts << " W";
+                    }
+                    depoLog(capsMsg.str());
+                    if (keepCap_) keptCapsMicro = *perGpuCapsForExec;
+                }
+                else if (bestResultCapInMicroWatts > 0)
+                {
+                    const double watts = bestResultCapInMicroWatts / 1e6;
+                    lastPerGpuCapsW_.assign(device_->getNumSubdevices(), watts);
+                    std::ostringstream capsMsg;
+                    capsMsg << std::fixed << std::setprecision(1)
+                            << "execution phase cap " << watts << " W";
+                    depoLog(capsMsg.str());
+                    if (keepCap_)
+                        keptCapsMicro.assign(device_->getNumSubdevices(),
+                            static_cast<unsigned long>(bestResultCapInMicroWatts));
+                }
                 execPhase(bestResultCapInMicroWatts, status, childProcId, referenceRun, perGpuCapsForExec);
-                device_->restoreDefaultLimits();
+                if (!keepCap_)
+                {
+                    keptCapsMicro.clear();
+                    device_->restoreDefaultLimits();
+                }
             }
         }
     }
@@ -637,7 +790,7 @@ void Eco::plotPowerLog(std::optional<FinalPowerAndPerfResult> results, std::stri
             const auto csv = logger_.getPerSubdeviceFileName(i);
             std::string img = csv;
             PlotBuilder ps(img.replace(img.end()-3, img.end(), "png"));
-            ps.setPlotTitle("gpu" + device_->getSubdeviceLabel(i) + " power log: " + device_->getName(), 16);
+            ps.setPlotTitle(device_->getSubdeviceLabel(i) + " power log: " + device_->getName(), 16);
             Series pcap(csv, 1, 2, "P cap [W]");
             Series pav(csv, 1, 3, "P[W]");
             ps.plotPowerLog({pcap, pav});

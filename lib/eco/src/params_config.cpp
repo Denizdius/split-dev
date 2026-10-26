@@ -51,6 +51,12 @@ void ParamsConfig::printConfigExplained()
             << optimizationDelay_ << " seconds.\n";
     std::cout << "\tTuning phase will be repeated after "
             << repeatTuningPeriodInSec_ << " seconds.\n";
+    std::cout << "\tFirst tuning window waits "
+            << tuningStartDelaySec_ << " seconds before it can start.\n";
+    std::cout << "\tEach search candidate accumulates "
+            << testPhaseRepeats_ << " test phase(s).\n";
+    std::cout << "\t--keep-cap searches within "
+            << keepCapBandW_ << " W of the cap kept from the previous period.\n";
     std::cout << "\tDEPO will DO "
             << (doWaitPhase_ ? "" : "NOT") << " wait for steady power consumption profile basing on SMA filtered power reading.\n";
     }
@@ -74,6 +80,18 @@ void ParamsConfig::loadConfig()
     k_ = config["k"].as<double>();
     repeatTuningPeriodInSec_ = config["repeatTuningPeriodInSec"].as<int>();
     doWaitPhase_ = config["doWaitPhase"].as<int>();
+    if (config["tuningStartDelaySec"])
+    {
+        tuningStartDelaySec_ = config["tuningStartDelaySec"].as<int>();
+    }
+    if (config["testPhaseRepeats"])
+    {
+        testPhaseRepeats_ = config["testPhaseRepeats"].as<int>();
+    }
+    if (config["keepCapBandW"])
+    {
+        keepCapBandW_ = config["keepCapBandW"].as<int>();
+    }
     referenceRunMultiplier_ = config["referenceRunMultiplier"].as<int>();
     usTestPhasePeriod_ = msTestPhasePeriod_ * 1000;
     // return cfg;

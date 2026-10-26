@@ -129,8 +129,10 @@ class Logger
             {
                 double p = dev->getCurrentPowerInWattsForSubdevice(i);
                 subPowers.push_back(p);
-                // minimal CSV: time, P_cap, P_av
-                sub_power_files_[i] << t << "\t\t" << current.appliedPowerCapInWatts_ << "\t\t" << p << "\n";
+                // Each GPU file stores that GPU's own enforced cap. The shared
+                // appliedPowerCapInWatts_ is the average once the cards differ.
+                double capW = dev->getPowerLimitInWattsForSubdevice(i);
+                sub_power_files_[i] << t << "\t\t" << capW << "\t\t" << p << "\n";
             }
         }
         auto line = logCurrentPowerLogtLine(deviceState.getTimeSinceObjectCreation(), current, reference, 2.0, (subPowers.empty() ? nullptr : &subPowers));

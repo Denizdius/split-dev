@@ -15,6 +15,7 @@
 */
 
 #include "devices/cuda_device.hpp"
+#include "devices/kernel_counter.hpp"
 
 static inline
 void logCurrentRangeGSS(int a, int leftCandidateInMilliWatts, int rightCandidateInMilliWatts, int b)
@@ -54,28 +55,6 @@ std::string generateUniqueDir()
         exit(1);
     }
     return dir;
-}
-
-static inline
-int long long readValueFromFile (std::string fileName)
-{
-    std::ifstream file (fileName.c_str());
-    std::string line;
-    long long int value = -1;
-    if (file.is_open())
-    {
-        while ( getline (file, line) )
-        {
-            value = atoi(line.c_str());
-        }
-        file.close();
-    }
-    else
-    {
-        std::cerr << "cannot read the value from file: " << fileName << "\n"
-                  << "file not open\n";
-    }
-    return value;
 }
 
 CudaDevice::CudaDevice(int devID) :
@@ -157,7 +136,7 @@ std::pair<unsigned, unsigned> CudaDevice::getMinMaxLimitInWatts() const
     {
         printf("Failed to GET min/max power limit: %s\n", nvmlErrorString(nvResult));
     }
-    return std::make_pair(min/1000, max/1000);
+    return applySearchBounds(std::make_pair(min/1000, max/1000));
 }
 
 void CudaDevice::setPowerLimitInMicroWatts(unsigned long limitInMicroW)
@@ -173,10 +152,7 @@ void CudaDevice::setPowerLimitInMicroWatts(unsigned long limitInMicroW)
 
 void CudaDevice::reset()
 {
-    std::ofstream kernelCounterFile;
-    kernelCounterFile.open("kernels_count", std::ios::out | std::ios::trunc);
-    kernelCounterFile << "0";
-    kernelCounterFile.close();
+    clearDepoKernelCounterFiles();
 }
 
 double CudaDevice::getCurrentPowerInWatts(std::optional<Domain>) const
@@ -210,14 +186,7 @@ void CudaDevice::initDeviceHandles()
 
 unsigned long long int CudaDevice::getPerfCounter() const
 {
-    long long int kernelsCountTmp {-1};
-    do
-    {
-        kernelsCountTmp = readValueFromFile("./kernels_count");
-    }
-    while (kernelsCountTmp == -1);
-
-    return (unsigned long long)kernelsCountTmp;
+    return sumDepoKernelCountFiles();
 }
 
 void CudaDevice::restoreDefaultLimits()

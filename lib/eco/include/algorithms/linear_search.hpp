@@ -45,15 +45,24 @@ class LinearSearchAlgorithm : public SearchAlgorithm
       while(procStatus)
       {
         device->setPowerLimitInMicroWatts(currentLimitInMicroWatts);
-        auto&& currentResult = sampleAndAccumulatePowAndPerfForGivenPeriod(
-          tuningTimeWindowInMilliSeconds * 1e3,
-          powerSamplingPeriodInMilliSeconds,
-          deviceState,
-          trigger,
-          procStatus,
-          childProcID,
-          logger);
-        logger.logPowerLogLine(deviceState, currentResult, reference);
+        const int repeats = device->searchSampleRepeats() < 1 ? 1 : device->searchSampleRepeats();
+        PowAndPerfResult currentResult;
+        for (int r = 0; r < repeats; ++r)
+        {
+            auto sample = sampleAndAccumulatePowAndPerfForGivenPeriod(
+              tuningTimeWindowInMilliSeconds * 1e3,
+              powerSamplingPeriodInMilliSeconds,
+              deviceState,
+              trigger,
+              procStatus,
+              childProcID,
+              logger);
+            logger.logPowerLogLine(deviceState, sample, reference);
+            if (r == 0) currentResult = sample;
+            else currentResult += sample;
+            waitpid(childProcID, &procStatus, WNOHANG);
+            if (!procStatus) break;
+        }
         if (bestResultSoFar.isRightBetter(currentResult, metric))
         {
             bestResultSoFar = std::move(currentResult);

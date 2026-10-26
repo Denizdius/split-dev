@@ -45,6 +45,7 @@ using ::std::vector;
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <algorithm>
 
@@ -342,10 +343,20 @@ ParseDepoAsyncEnv()
     }
 }
 
+static pid_t
+DepoCounterPid()
+{
+    static const pid_t pid = getpid();
+    return pid;
+}
+
+// One file per process. Several vLLM workers otherwise truncate the same
+// kernels_count file and the reader sees the counter jump backwards.
 static void
 WriteKernelsCountFile(unsigned long long value)
 {
-    kernelCounterFile.open("kernels_count", std::ios::out | std::ios::trunc);
+    const std::string name = std::string("kernels_count.") + std::to_string(DepoCounterPid());
+    kernelCounterFile.open(name.c_str(), std::ios::out | std::ios::trunc);
     kernelCounterFile << value << std::flush;
     kernelCounterFile.close();
 }
@@ -353,7 +364,8 @@ WriteKernelsCountFile(unsigned long long value)
 static void
 WritePerGpuKernelCountFile(int deviceId, unsigned long long value)
 {
-    std::string name = std::string("kernels_gpu_") + std::to_string(deviceId);
+    const std::string name = std::string("kernels_gpu_") + std::to_string(deviceId)
+        + "." + std::to_string(DepoCounterPid());
     kernelCounterFile.open(name.c_str(), std::ios::out | std::ios::trunc);
     kernelCounterFile << value << std::flush;
     kernelCounterFile.close();
@@ -433,25 +445,18 @@ ProfilerCallbackHandler(
                     }
                     ++globalCounter;
 
-                    unsigned long long sumKernels = 0ULL;
-                    for (int tid : depoTargetGpuIds)
-                    {
-                        auto it = perDeviceKernelCounts.find(tid);
-                        const unsigned long long c =
-                            (it == perDeviceKernelCounts.end()) ? 0ULL : it->second;
-                        sumKernels += c;
-                    }
-                    if (sumKernels > 0ULL
+                    if (globalCounter > 0ULL
                         && maxNumRanges > 0
-                        && (sumKernels % static_cast<unsigned long long>(maxNumRanges)) == 0ULL)
+                        && (globalCounter % static_cast<unsigned long long>(maxNumRanges)) == 0ULL)
                     {
-                        WriteKernelsCountFile(sumKernels);
+                        WriteKernelsCountFile(globalCounter);
                         for (int tid : depoTargetGpuIds)
                         {
                             auto it = perDeviceKernelCounts.find(tid);
-                            const unsigned long long c =
-                                (it == perDeviceKernelCounts.end()) ? 0ULL : it->second;
-                            WritePerGpuKernelCountFile(tid, c);
+                            if (it != perDeviceKernelCounts.end() && it->second > 0ULL)
+                            {
+                                WritePerGpuKernelCountFile(tid, it->second);
+                            }
                         }
                     }
                 }
